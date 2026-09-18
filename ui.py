@@ -2,6 +2,7 @@ import customtkinter as ctk
 import psutil
 import os
 import platform
+from collections import deque
 
 # colour vars (dark industrial theme)
 BG = "#0d0d0d"
@@ -12,6 +13,21 @@ TEXT_DIM = "#777777"
 BORDER = "#333333"
 MONO = "Courier"
 
+# threshold colours (green = fine, amber = getting hot, red = danger)
+GREEN = "#22cc44"
+AMBER = "#ffaa00"
+RED = "#ff2200"
+
+
+# picks a colour based on how high a percentage is
+# (below 70 = green, 70-89 = amber, 90+ = red)
+def threshold_colour(value: float, warn: float = 70, crit: float = 90) -> str:
+    if value >= crit:
+        return RED
+    elif value >= warn:
+        return AMBER
+    return GREEN
+
 
 class OtsegoMonitor(ctk.CTk):
     def __init__(self):
@@ -20,6 +36,9 @@ class OtsegoMonitor(ctk.CTk):
         self.geometry("750x550")
         self.configure(fg_color=BG)
         self.minsize(650, 500)
+
+        # stores the last 60 cpu readings for the sparkline (1 per second = 60s)
+        self.cpu_history = deque(maxlen=60)
 
         self._build_ui()
         self._update()  # start the refresh loop
@@ -52,6 +71,26 @@ class OtsegoMonitor(ctk.CTk):
         self.ram_card = self._make_card(grid, 0, 1, "MEMORY")
         self.disk_card = self._make_card(grid, 1, 0, "DISK")
         self.net_card = self._make_card(grid, 1, 1, "NETWORK")
+
+        # the cpu sparkline (text-based bar graph)
+        hist_frame = ctk.CTkFrame(self, fg_color=SURFACE, border_width=1, border_color=BORDER)
+        hist_frame.pack(fill="x", padx=30, pady=(10, 0))
+
+        hist_label = ctk.CTkLabel(
+            hist_frame, text="CPU HISTORY (60s)",
+            font=ctk.CTkFont(family=MONO, size=10),
+            text_color=TEXT_DIM
+        )
+        hist_label.pack(anchor="w", padx=12, pady=(8, 4))
+
+        # this is the actual sparkline text that gets updated every second
+        self.hist_label = ctk.CTkLabel(
+            hist_frame, text="",
+            font=ctk.CTkFont(family=MONO, size=11),
+            text_color=ACCENT,
+            justify="left"
+        )
+        self.hist_label.pack(anchor="w", padx=12, pady=(0, 8))
 
         # status line at the bottom
         self.status_label = ctk.CTkLabel(
@@ -97,20 +136,26 @@ class OtsegoMonitor(ctk.CTk):
     def _update(self):
         # CPU
         cpu_pct = psutil.cpu_percent(interval=None)
-        self.cpu_card["value"].configure(text=f"{cpu_pct:.0f}%")
+        self.cpu_history.append(cpu_pct)
+
+        # colour the number based on how hot the cpu is
+        colour = threshold_colour(cpu_pct)
+        self.cpu_card["value"].configure(text=f"{cpu_pct:.0f}%", text_color=colour)
         per_cpu = psutil.cpu_percent(interval=None, percpu=True)
         self.cpu_card["detail"].configure(text=f"avg across {len(per_cpu)} cores")
 
         # RAM
         ram = psutil.virtual_memory()
-        self.ram_card["value"].configure(text=f"{ram.percent:.0f}%")
+        ram_colour = threshold_colour(ram.percent)
+        self.ram_card["value"].configure(text=f"{ram.percent:.0f}%", text_color=ram_colour)
         self.ram_card["detail"].configure(
             text=f"{ram.used / 1024**3:.1f} / {ram.total / 1024**3:.1f} GB"
         )
 
         # disk (root partition)
         disk = psutil.disk_usage("/")
-        self.disk_card["value"].configure(text=f"{disk.percent:.0f}%")
+        disk_colour = threshold_colour(disk.percent)
+        self.disk_card["value"].configure(text=f"{disk.percent:.0f}%", text_color=disk_colour)
         self.disk_card["detail"].configure(
             text=f"{disk.used / 1024**3:.1f} / {disk.total / 1024**3:.1f} GB"
         )
@@ -119,8 +164,27 @@ class OtsegoMonitor(ctk.CTk):
         net = psutil.net_io_counters()
         down = net.bytes_recv / 1024**2
         up = net.bytes_sent / 1024**2
-        self.net_card["value"].configure(text=f"{down:.0f} MB")
+        self.net_card["value"].configure(text=f"{down:.0f} MB", text_color=TEXT)
         self.net_card["detail"].configure(text=f"↓ {down:.1f} MB  ↑ {up:.1f} MB (total)")
+
+        # the sparkline: converts each cpu value (0-100) into a block character
+        if self.cpu_history:
+            bars = ""
+            for v in self.cpu_history:
+                level = int(v / 10)  # maps 0-100 to 0-10
+                if level >= 9:
+                    bars += "█"
+                elif level >= 7:
+                    bars += "▇"
+                elif level >= 5:
+                    bars += "▆"
+                elif level >= 3:
+                    bars += "▄"
+                elif level >= 1:
+                    bars += "▂"
+                else:
+                    bars += " "
+            self.hist_label.configure(text=bars)
 
         # schedule the next update in 1000ms
         self.after(1000, self._update)

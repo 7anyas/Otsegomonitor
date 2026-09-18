@@ -12,6 +12,8 @@ shows cpu, memory, disk, and network usage with threshold-based colour coding.
 - network I/O totals
 - 60-second CPU history sparkline
 - colour thresholds: green < 70%, amber 70-89%, red >= 90%
+- uptime counter
+- built-in screenshot button
 
 ## Requirements
 
@@ -21,14 +23,19 @@ shows cpu, memory, disk, and network usage with threshold-based colour coding.
 ## Setup
 
 ```bash
-sudo apt install python3-tk
+# system dependencies
+sudo apt install python3-tk imagemagick
+
+# custom fonts
+mkdir -p ~/.local/share/fonts
+cp assets/fonts/*.otf assets/fonts/*.ttf ~/.local/share/fonts/
+fc-cache -fv
+
+# project
 git clone https://github.com/7anyas/Otsegomonitor
 cd Otsegomonitor
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt   
-mkdir -p ~/.local/share/fonts
-cp assets/fonts/*.otf assets/fonts/*.ttf ~/.local/share/fonts/
-fc-cache -fv   
+pip install -r requirements.txt
 ```
 enjoy :)

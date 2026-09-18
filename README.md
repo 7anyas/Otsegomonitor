@@ -27,5 +27,8 @@ cd Otsegomonitor
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt   
+mkdir -p ~/.local/share/fonts
+cp assets/fonts/*.otf assets/fonts/*.ttf ~/.local/share/fonts/
+fc-cache -fv   
 ```
 enjoy :)
